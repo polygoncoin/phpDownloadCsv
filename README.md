@@ -5,11 +5,13 @@ To enable compression for downloading dynamically generated CSV files in NGINX i
 
 Here's an example of how you can enable compression for downloading dynamically generated CSV files in NGINX:
 
+<code>
 http {
 
   gzip on;
   gzip_types text/plain text/csv;
 }
+</code>
 
 In this example, we have enabled gzip compression and specified that text/plain and text/csv MIME types should be compressed. You can also use the text/* wildcard to include all text-based MIME types.
 
