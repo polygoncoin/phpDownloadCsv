@@ -58,12 +58,22 @@ SOFTWARE.
  * 
  * Example: 
  * define('HOSTNAME', '127.0.0.1'); 
- * define('USERNAME', 'root'); 
- * define('PASSWORD', 'shames11'); 
- * define('DATABASE', 'sdk2'); 
+ * define('USERNAME', 'username'); 
+ * define('PASSWORD', 'password'); 
+ * define('DATABASE', 'database'); 
  * 
- * $sql = 'SELECT * FROM customer WHERE column1 = "'.addslashes($_POST['column1_val']).'" LIMIT 0,10;'; 
- * $csvFilename = 'example.csv'; 
+ * $sql = '
+ *     SELECT
+ *         column1 as COLUMN1,
+ *         column2 as COLUMN2,
+ *         column3 as COLUMN3,
+ *         column4 as COLUMN4
+ *     FROM
+ *         TABLE_NAME
+ *     WHERE
+ *         column5 = "'.addslashes($_POST['column5']).'"
+ * '; 
+ * $csvFilename = 'export.csv'; 
  * 
  * try { 
  *   $mySqlCsv = new downloadCSV(); 
@@ -72,11 +82,21 @@ SOFTWARE.
  * } catch (\Exception $e) { 
  *   echo $e->getMessage(); 
  * } 
- *
+ * 
+ * To initiate downlaod including saving Sql query CSV data to a particular location, use below code.
+ *  
+ * $csvAbsoluteFilePath = '/folder path where to export/export.csv'; 
+ * 
+ * try { 
+ *   $mySqlCsv = new downloadCSV();
+ *   $mySqlCsv->initDownload($sql, $csvFilename, $csvAbsoluteFilePath); 
+ * } catch (\Exception $e) { 
+ *   echo $e->getMessage(); 
+ * } 
+ * 
  * To save Sql query CSV data to a particular location instead of download, use below code.
  *  
- * $sql = 'SELECT * FROM customer WHERE column1 = "'.addslashes($_POST['column1_val']).'" LIMIT 0,10;'; 
- * $csvAbsoluteFilePath = '/path to export/nameOfFile.csv'; 
+ * $csvAbsoluteFilePath = '/folder path where to export/export.csv'; 
  * 
  * try { 
  *   $mySqlCsv = new downloadCSV(); 
@@ -142,23 +162,29 @@ class downloadCSV
     /** 
      * Initialise download. 
      * 
-     * @param $sql         MySql query whose output is used to be used to generate a CSV file. 
-     * @param $csvFilename Name to be used to save CSV file on client machine.  
+     * @param $sql                 MySql query whose output is used to be used to generate a CSV file. 
+     * @param $csvFilename         Name to be used to save CSV file on client machine.  
+     * @param $csvAbsoluteFilePath Absolute file path with filename to be used to save CSV.  
      * 
      * @return void 
      */ 
-    public function initDownload($sql, $csvFilename)
+    public function initDownload($sql, $csvFilename, $csvAbsoluteFilePath = null)
     { 
         // Validation 
         $this->vSql($sql); 
         $this->vCsvFilename($csvFilename); 
 
         $this->setCsvHeaders($csvFilename);
-        list($shellCommand, $tmpFilename) = $this->getShellCommand($sql);
+        list($shellCommand, $tmpFilename) = $this->getShellCommand($sql, $csvAbsoluteFilePath);
 
+        if (!is_null($csvAbsoluteFilePath)) {
+            $this->useTmpFile = true;
+            $this->unlink = false;
+        }
+        
         if ($this->useTmpFile) {
             // Execute shell command 
-            // The shell command creates a temporary file. 
+            // The shell command to create CSV export file. 
             shell_exec($shellCommand);
             $this->streamCsvFile($tmpFilename, $csvFilename);
         } else {
