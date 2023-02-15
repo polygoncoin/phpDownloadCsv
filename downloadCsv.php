@@ -225,13 +225,12 @@ class downloadCSV
             . '--execute='.escapeshellarg($sql).' '
             . '| sed -e \'s/"/""/g ; s/\t/","/g ; s/^/"/g ; s/$/"/g\'';
 
-        if ($this->useTmpFile) {
+        if (!is_null($csvAbsoluteFilePath)) {
+            $tmpFilename = $csvAbsoluteFilePath;
+            $shellCommand .= ' > '.escapeshellarg($tmpFilename);
+        } elseif ($this->useTmpFile) {
             // Generate temporary file for storing output of shell command on server side. 
-            if (!is_null($csvAbsoluteFilePath)) {
-                $tmpFilename = $csvAbsoluteFilePath;
-            } else {
-                $tmpFilename = tempnam(sys_get_temp_dir(), 'CSV');
-            }
+            $tmpFilename = tempnam(sys_get_temp_dir(), 'CSV');
             $shellCommand .= ' > '.escapeshellarg($tmpFilename);
         } else {
             $tmpFilename = null;
