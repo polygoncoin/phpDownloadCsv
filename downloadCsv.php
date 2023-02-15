@@ -62,13 +62,25 @@ SOFTWARE.
  * define('PASSWORD', 'shames11'); 
  * define('DATABASE', 'sdk2'); 
  * 
- * $sql = 'SELECT * FROM customer WHERE column1 = "'.addslashes($_POST['column1_val']).'" LIMIT 0,10'; 
+ * $sql = 'SELECT * FROM customer WHERE column1 = "'.addslashes($_POST['column1_val']).'" LIMIT 0,10;'; 
  * $csvFilename = 'example.csv'; 
  * 
  * try { 
  *   $mySqlCsv = new downloadCSV(); 
  *   $mySqlCsv->useTmpFile = false; // defaults true for large data export.
  *   $mySqlCsv->initDownload($sql, $csvFilename); 
+ * } catch (\Exception $e) { 
+ *   echo $e->getMessage(); 
+ * } 
+ *
+ * To save Sql query CSV data to a particular location instead of download, use below code.
+ *  
+ * $sql = 'SELECT * FROM customer WHERE column1 = "'.addslashes($_POST['column1_val']).'" LIMIT 0,10;'; 
+ * $csvAbsoluteFilePath = '/path to export/nameOfFile.csv'; 
+ * 
+ * try { 
+ *   $mySqlCsv = new downloadCSV(); 
+ *   $mySqlCsv->saveCsvExport($sql, $csvAbsoluteFilePath); 
  * } catch (\Exception $e) { 
  *   echo $e->getMessage(); 
  * } 
@@ -157,6 +169,25 @@ class downloadCSV
     } 
 
     /** 
+     * Initialise download. 
+     * 
+     * @param $sql                 MySql query whose output is used to be used to generate a CSV file. 
+     * @param $csvAbsoluteFilePath Absolute file path with filename to be used to save CSV.  
+     * 
+     * @return void 
+     */
+    public function saveCsvExport($sql, $csvAbsoluteFilePath)
+    {
+        // Validation 
+        $this->vSql($sql); 
+
+        list($shellCommand, $tmpFilename) = $this->getShellCommand($sql, $csvAbsoluteFilePath);
+
+        // Execute shell command 
+        // The shell command saves exported CSV data to provided $csvAbsoluteFilePath path. 
+        shell_exec($shellCommand);
+    }
+    /** 
      * Set CSV file headers
      * 
      * @param $csvFilename Name to be used to save CSV file on client machine.  
@@ -175,11 +206,12 @@ class downloadCSV
     /** 
      * Executes SQL and saves output to a temporary file on server end. 
      * 
-     * @param $sql MySql query whose output is used to be used to generate a CSV file. 
+     * @param $sql                 MySql query whose output is used to be used to generate a CSV file. 
+     * @param $csvAbsoluteFilePath (Optional)Absolute file path with filename to be used to save CSV.  
      * 
      * @return array
      */ 
-    private function getShellCommand($sql) 
+    private function getShellCommand($sql, $csvAbsoluteFilePath = null) 
     { 
         // Validation 
         $this->vSql($sql);
@@ -195,7 +227,11 @@ class downloadCSV
 
         if ($this->useTmpFile) {
             // Generate temporary file for storing output of shell command on server side. 
-            $tmpFilename = tempnam(sys_get_temp_dir(), 'CSV');
+            if (!is_null($csvAbsoluteFilePath)) {
+                $tmpFilename = $csvAbsoluteFilePath;
+            } else {
+                $tmpFilename = tempnam(sys_get_temp_dir(), 'CSV');
+            }
             $shellCommand .= ' > '.escapeshellarg($tmpFilename);
         } else {
             $tmpFilename = null;
