@@ -104,7 +104,7 @@ SOFTWARE.
  * try { 
  *   $mySqlCsv = new downloadCSV();
  *   $mySqlCsv->connect(HOSTNAME, USERNAME, PASSWORD, DATABASE);
- *   $mySqlCsv->initDownload($csvFilename, $sql, $params);
+ *   $mySqlCsv->initDownload($csvFilename, $sql, $params, $csvAbsoluteFilePath);
  * } catch (\Exception $e) { 
  *   echo $e->getMessage(); 
  * } 
