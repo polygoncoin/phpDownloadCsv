@@ -24,7 +24,7 @@ SOFTWARE.
 */ 
 
 /* 
- * When it comes to Download CSV, every developer faces the problem of memory limit in PHP. 
+ * When it comes to Download CSV, most of the time developer faces issue of memory limit in PHP. 
  * especially when supporting downloads of more than 30,000 records at a time. 
  * 
  * Below class solves this issue by executing shell command for MySql Client installed on the server from PHP script. 
@@ -62,7 +62,7 @@ SOFTWARE.
  * define('PASSWORD', 'password'); 
  * define('DATABASE', 'database'); 
  * 
- * $sql = '
+ * $sql = "
  *     SELECT
  *         column1 as COLUMN1,
  *         column2 as COLUMN2,
@@ -71,14 +71,28 @@ SOFTWARE.
  *     FROM
  *         TABLE_NAME
  *     WHERE
- *         column5 = "'.addslashes($_POST['column5']).'"
- * '; 
+ *         column5 = :column5
+ *         column6 LIKE CONCAT('%' , :column6, '%');
+ *         column7 IN (:column7);
+ * ";
+ * 
+ * $params = [
+ *     ':column5' => 'column5_value',
+ *     ':column6' => 'column6_search_value',
+ *     ':column7' => [
+ *         'column7_value1',
+ *         'column7_value2',
+ *         'column7_value3'
+ *     ]
+ * ];
+ *
  * $csvFilename = 'export.csv'; 
  * 
  * try { 
  *   $mySqlCsv = new downloadCSV(); 
+ *   $mySqlCsv->connect(HOSTNAME, USERNAME, PASSWORD, DATABASE);
  *   $mySqlCsv->useTmpFile = false; // defaults true for large data export.
- *   $mySqlCsv->initDownload($sql, $csvFilename); 
+ *   $mySqlCsv->initDownload($csvFilename, $sql, $params);
  * } catch (\Exception $e) { 
  *   echo $e->getMessage(); 
  * } 
@@ -89,7 +103,8 @@ SOFTWARE.
  * 
  * try { 
  *   $mySqlCsv = new downloadCSV();
- *   $mySqlCsv->initDownload($sql, $csvFilename, $csvAbsoluteFilePath); 
+ *   $mySqlCsv->connect(HOSTNAME, USERNAME, PASSWORD, DATABASE);
+ *   $mySqlCsv->initDownload($csvFilename, $sql, $params);
  * } catch (\Exception $e) { 
  *   echo $e->getMessage(); 
  * } 
@@ -100,13 +115,40 @@ SOFTWARE.
  * 
  * try { 
  *   $mySqlCsv = new downloadCSV(); 
- *   $mySqlCsv->saveCsvExport($sql, $csvAbsoluteFilePath); 
+ *   $mySqlCsv->connect(HOSTNAME, USERNAME, PASSWORD, DATABASE);
+ *   $mySqlCsv->saveCsvExport($csvAbsoluteFilePath, $sql, $params); 
  * } catch (\Exception $e) { 
  *   echo $e->getMessage(); 
  * } 
  */ 
+
 class downloadCSV 
 {
+    /**
+     * @var MySql hostname.
+     */
+    private $hostname = null;
+
+    /**
+     * @var MySql username.
+     */
+    private $username = null;
+
+    /**
+     * @var MySql password.
+     */
+    private $password = null;
+
+    /**
+     * @var MySql database.
+     */
+    private $database = null;
+
+    /**
+     * @var MySql PDO object.
+     */
+    private $pdo = null;
+
     /** 
      * @var boolean Allow creation of temporary file required for streaming large data. 
      */ 
@@ -160,19 +202,40 @@ class downloadCSV
     } 
 
     /** 
+     * Set MySql connection details. 
+     * 
+     * @param $hostname MySql hostname.
+     * @param $username MySql username.
+     * @param $password MySql password.
+     * @param $database MySql database.
+     * 
+     * @return void 
+     */ 
+    public function connect($hostname, $username, $password, $database)
+    { 
+        $this->hostname = $hostname;
+        $this->username = $username;
+        $this->password = $password;
+        $this->database = $database;
+    } 
+
+    /** 
      * Initialise download. 
      * 
-     * @param $sql                 MySql query whose output is used to be used to generate a CSV file. 
      * @param $csvFilename         Name to be used to save CSV file on client machine.  
+     * @param $sql                 MySql query whose output is used to be used to generate a CSV file. 
+     * @param $params              MySql query bng params used to generate raw Sql. 
      * @param $csvAbsoluteFilePath Absolute file path with filename to be used to save CSV.  
      * 
      * @return void 
      */ 
-    public function initDownload($sql, $csvFilename, $csvAbsoluteFilePath = null)
+    public function initDownload($csvFilename, $sql, $params = [], $csvAbsoluteFilePath = null)
     { 
         // Validation 
         $this->vSql($sql); 
         $this->vCsvFilename($csvFilename); 
+
+        $sql = $this->generateRawSqlQuery($sql, $params);
 
         $this->setCsvHeaders($csvFilename);
         list($shellCommand, $tmpFilename) = $this->getShellCommand($sql, $csvAbsoluteFilePath);
@@ -197,15 +260,18 @@ class downloadCSV
     /** 
      * Initialise download. 
      * 
-     * @param $sql                 MySql query whose output is used to be used to generate a CSV file. 
      * @param $csvAbsoluteFilePath Absolute file path with filename to be used to save CSV.  
+     * @param $sql                 MySql query whose output is used to be used to generate a CSV file. 
+     * @param $params              MySql query bng params used to generate raw Sql. 
      * 
      * @return void 
      */
-    public function saveCsvExport($sql, $csvAbsoluteFilePath)
+    public function saveCsvExport($csvAbsoluteFilePath, $sql, $params = [])
     {
         // Validation 
         $this->vSql($sql); 
+
+        $sql = $this->generateRawSqlQuery($sql, $params);
 
         list($shellCommand, $tmpFilename) = $this->getShellCommand($sql, $csvAbsoluteFilePath);
 
@@ -213,6 +279,80 @@ class downloadCSV
         // The shell command saves exported CSV data to provided $csvAbsoluteFilePath path. 
         shell_exec($shellCommand);
     }
+
+    /** 
+     * Generate raw Sql query from parameterised query via PDO.
+     * 
+     * @param $sql    MySql query whose output is used to be used to generate a CSV file. 
+     * @param $params MySql query bng params used to generate raw Sql. 
+     * 
+     * @return string
+     */ 
+    private function generateRawSqlQuery($sql, $params)
+    {
+        if (count($params) > 0) {
+            //mysqli connection
+            $mysqli = mysqli_connect($this->hostname, $this->username, $this->password, $this->database);
+            if (!$mysqli) {
+                throw new Exception('Connection error: ' . mysqli_connect_error());
+            }
+
+            //Validate parameterised query.
+            if(substr_count($sql, ':') !== count($params)) {
+                throw new Exception("Parameterised query has mismatch in number of params");
+            }
+            $paramKeys = array_keys($params);
+            $paramPos = [];
+            foreach ($paramKeys as $value) {
+                if (substr_count($sql, $value) > 1) {
+                    throw new Exception("Parameterised query has more than one occurance of param '{$value}'");
+                }
+                $paramPos[$value] = strpos($sql, $value);
+            }
+            foreach ($paramPos as $key => $value) {
+                if (substr($sql, $value, strlen($key)) !== $key) {
+                    throw new Exception("Invalid param key '{$key}'");
+                }
+            }
+
+            //Generate bind params 
+            $bindParams = [];
+            foreach ($params as $key => $values) {
+                if (is_array($values)) {
+                    $tmpParams = [];
+                    $count = 1;
+                    foreach($values as $value) {
+                        if (is_array($value)) {
+                            throw new Exception("Invalid params for key '{$key}'");
+                        }
+                        $newKey = $key.$count;
+                        if (in_array($newKey, $paramKeys)) {
+                            throw new Exception("Invalid parameterised params '{$newKey}'");
+                        }
+                        $tmpParams[$key.$count++] = $value;
+                    }
+                    $sql = str_replace($key, implode(', ',array_keys($tmpParams)), $sql);
+                    $bindParams = array_merge($bindParams, $tmpParams);
+                } else {
+                    $bindParams[$key] = $values;
+                }
+            }
+
+            //Replace Paremeteried values.
+            foreach ($bindParams as $key => $value) {
+                if (!ctype_digit($value)) {
+                    $value = "'" . mysqli_real_escape_string($mysqli, $value) . "'";
+                }
+                $sql = str_replace($key, $value, $sql);
+            }
+
+            // Close mysqli connection.
+            mysqli_close($mysqli);
+        }
+
+        return $sql;
+    }
+
     /** 
      * Set CSV file headers
      * 
@@ -244,10 +384,10 @@ class downloadCSV
 
         // Shell command. 
         $shellCommand = 'mysql '
-            . '--host='.escapeshellarg(HOSTNAME).' '
-            . '--user='.escapeshellarg(USERNAME).' ' 
-            . '--password='.escapeshellarg(PASSWORD).' '
-            . '--database='.escapeshellarg(DATABASE).' ' 
+            . '--host='.escapeshellarg($this->hostname).' '
+            . '--user='.escapeshellarg($this->username).' ' 
+            . '--password='.escapeshellarg($this->password).' '
+            . '--database='.escapeshellarg($this->database).' ' 
             . '--execute='.escapeshellarg($sql).' '
             . '| sed -e \'s/"/""/g ; s/\t/","/g ; s/^/"/g ; s/$/"/g\'';
 
