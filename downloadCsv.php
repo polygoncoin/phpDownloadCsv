@@ -69,6 +69,27 @@ SOFTWARE.
  *         column3 as COLUMN3,
  *         column4 as COLUMN4
  *     FROM
+ *         TABLE_NAME;
+ * ";
+ *
+ * $csvFilename = 'export.csv'; 
+ * 
+ * try { 
+ *   $mySqlCsv = new downloadCSV(); 
+ *   $mySqlCsv->connect(HOSTNAME, USERNAME, PASSWORD, DATABASE);
+ *   $mySqlCsv->useTmpFile = false; // defaults true for large data export.
+ *   $mySqlCsv->initDownload($csvFilename, $sql);
+ * } catch (\Exception $e) { 
+ *   echo $e->getMessage(); 
+ * } 
+ * 
+ * $sql = "
+ *     SELECT
+ *         column1 as COLUMN1,
+ *         column2 as COLUMN2,
+ *         column3 as COLUMN3,
+ *         column4 as COLUMN4
+ *     FROM
  *         TABLE_NAME
  *     WHERE
  *         column5 = :column5
@@ -143,11 +164,6 @@ class downloadCSV
      * @var MySql database.
      */
     private $database = null;
-
-    /**
-     * @var MySql PDO object.
-     */
-    private $pdo = null;
 
     /** 
      * @var boolean Allow creation of temporary file required for streaming large data. 
@@ -320,29 +336,28 @@ class downloadCSV
             foreach ($params as $key => $values) {
                 if (is_array($values)) {
                     $tmpParams = [];
-                    $count = 1;
                     foreach($values as $value) {
                         if (is_array($value)) {
                             throw new Exception("Invalid params for key '{$key}'");
                         }
-                        $newKey = $key.$count;
-                        if (in_array($newKey, $paramKeys)) {
-                            throw new Exception("Invalid parameterised params '{$newKey}'");
+                        if (!ctype_digit($value)) {
+                            $value = "'" . mysqli_real_escape_string($mysqli, $value) . "'";
                         }
-                        $tmpParams[$key.$count++] = $value;
+                        $tmpParams[] = $value;
                     }
-                    $sql = str_replace($key, implode(', ',array_keys($tmpParams)), $sql);
-                    $bindParams = array_merge($bindParams, $tmpParams);
+                    if (count($tmpParams) > 0) {
+                        $bindParams[$key] = implode(', ', $tmpParams);
+                    }
                 } else {
+                    if (!ctype_digit($values)) {
+                        $value = "'" . mysqli_real_escape_string($mysqli, $values) . "'";
+                    }
                     $bindParams[$key] = $values;
                 }
             }
 
             //Replace Paremeteried values.
             foreach ($bindParams as $key => $value) {
-                if (!ctype_digit($value)) {
-                    $value = "'" . mysqli_real_escape_string($mysqli, $value) . "'";
-                }
                 $sql = str_replace($key, $value, $sql);
             }
 
