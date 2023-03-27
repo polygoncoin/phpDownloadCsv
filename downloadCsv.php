@@ -307,12 +307,6 @@ class downloadCSV
     private function generateRawSqlQuery($sql, $params)
     {
         if (count($params) > 0) {
-            //mysqli connection
-            $mysqli = mysqli_connect($this->hostname, $this->username, $this->password, $this->database);
-            if (!$mysqli) {
-                throw new Exception('Connection error: ' . mysqli_connect_error());
-            }
-
             //Validate parameterised query.
             if(substr_count($sql, ':') !== count($params)) {
                 throw new Exception("Parameterised query has mismatch in number of params");
@@ -329,6 +323,12 @@ class downloadCSV
                 if (substr($sql, $value, strlen($key)) !== $key) {
                     throw new Exception("Invalid param key '{$key}'");
                 }
+            }
+
+            //mysqli connection
+            $mysqli = mysqli_connect($this->hostname, $this->username, $this->password, $this->database);
+            if (!$mysqli) {
+                throw new Exception('Connection error: ' . mysqli_connect_error());
             }
 
             //Generate bind params 
@@ -356,13 +356,13 @@ class downloadCSV
                 }
             }
 
+            // Close mysqli connection.
+            mysqli_close($mysqli);
+
             //Replace Paremeteried values.
             foreach ($bindParams as $key => $value) {
                 $sql = str_replace($key, $value, $sql);
             }
-
-            // Close mysqli connection.
-            mysqli_close($mysqli);
         }
 
         return $sql;
